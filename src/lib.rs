@@ -49,7 +49,8 @@ impl Plugin for XLSX {
                     result: None,
                 },
                 PluginExample {
-                    example: "[{user: bob, age: 30},{user: john, age:40}] | to xlsx Users.xlsx".into(),
+                    example: "[{user: bob, age: 30},{user: john, age:40}] | to xlsx Users.xlsx"
+                        .into(),
                     description: "Save list of record to to xlsx file with sheet name".into(),
                     result: None,
                 },
