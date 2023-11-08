@@ -9,7 +9,9 @@ pub(crate) fn write_to_xlsx(
     sheet_name: &str,
 ) -> Result<(), LabeledError> {
     let mut workbook = Workbook::new();
+
     let worksheet = workbook.add_worksheet().set_name(sheet_name).unwrap();
+
 
     match &value {
         Value::Record { val, .. } => {
@@ -44,6 +46,9 @@ pub(crate) fn write_to_xlsx(
         }
         _ => (),
     }
+
+    // let worksheet2 = workbook.add_worksheet().set_name("Sheet2").unwrap();
+    // worksheet2.write_string(0, 0, "Hello, World!").unwrap();
 
     let _ = workbook.save(path);
 
