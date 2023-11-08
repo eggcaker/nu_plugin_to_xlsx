@@ -19,19 +19,26 @@ cargo install nu_plugin_xlsx
 - To register (from inside Nushell):
 
 ```
-> register ~/.cargo/bin/nu_plugin_xlsx
+register ~/.cargo/bin/nu_plugin_xlsx
 ```
 
 ##  Usage 
 
   Save a record to xlsx file with sheet name
-  > {user: bob, age: 30} | to xlsx User.xlsx
-
+  ```
+  {user: bob, age: 30} | to xlsx User.xlsx
+  ```
   Save a table to excel xlsx file
-  > echo [[name]; [bob]] | to xlsx
+  ```
+  echo [[name]; [bob]] | to xlsx
+  ```
 
   Save piped data to xlsx file with sheet name
-  > ls | to xlsx Files.xlsx
+  ```
+  ls | to xlsx Files.xlsx
+  ```
 
   Save list of record to to xlsx file with sheet name
-  > [{user: bob, age: 30},{user: john, age:40}] | to xlsx Users.xlsx
+  ```
+  [{user: bob, age: 30},{user: john, age:40}] | to xlsx Users.xlsx
+  ```
