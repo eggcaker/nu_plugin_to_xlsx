@@ -61,12 +61,51 @@ impl ToXlsx {
 
     fn write_cell(&self, worksheet: &mut rust_xlsxwriter::Worksheet, row: u32, col: u16, value: &Value) -> Result<(), Box<dyn std::error::Error>> {
         match value {
-            Value::String { val, .. } => worksheet.write_string(row, col, val)?,
-            Value::Int { val, .. } => worksheet.write_number(row, col, *val as f64)?,
-            Value::Float { val, .. } => worksheet.write_number(row, col, *val)?,
-            Value::Bool { val, .. } => worksheet.write_boolean(row, col, *val)?,
-            _ => worksheet.write_string(row, col, &format!("{:?}", value))?,
-        };
+            Value::String { val, .. } => {
+                worksheet.write_string(row, col, val)?;
+            }
+            Value::Int { val, .. } => {
+                worksheet.write_number(row, col, *val as f64)?;
+            }
+            Value::Float { val, .. } => {
+                worksheet.write_number(row, col, *val)?;
+            }
+            Value::Bool { val, .. } => {
+                worksheet.write_boolean(row, col, *val)?;
+            }
+            Value::Date { val, .. } => {
+                worksheet.write_string(row, col, &format!("{}", val))?;
+            }
+            Value::Filesize { val, .. } => {
+                // Convert filesize to human readable string
+                let size_str = if *val < 1024 {
+                    format!("{} B", val)
+                } else if *val < 1024 * 1024 {
+                    format!("{:.1} KB", *val as f64 / 1024.0)
+                } else if *val < 1024 * 1024 * 1024 {
+                    format!("{:.1} MB", *val as f64 / (1024.0 * 1024.0))
+                } else {
+                    format!("{:.1} GB", *val as f64 / (1024.0 * 1024.0 * 1024.0))
+                };
+                worksheet.write_string(row, col, &size_str)?;
+            }
+            Value::Duration { val, .. } => {
+                // Convert duration to a readable string
+                let duration_str = if *val < 1_000 {
+                    format!("{} ns", val)
+                } else if *val < 1_000_000 {
+                    format!("{:.1} µs", *val as f64 / 1_000.0)
+                } else if *val < 1_000_000_000 {
+                    format!("{:.1} ms", *val as f64 / 1_000_000.0)
+                } else {
+                    format!("{:.1} s", *val as f64 / 1_000_000_000.0)
+                };
+                worksheet.write_string(row, col, &duration_str)?;
+            }
+            _ => {
+                worksheet.write_string(row, col, &format!("{:?}", value))?;
+            }
+        }
         Ok(())
     }
 }
