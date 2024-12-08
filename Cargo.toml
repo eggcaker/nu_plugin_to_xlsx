@@ -1,0 +1,11 @@
+[package]
+name = "nu_plugin_to_xlsx"
+version = "0.1.0"
+edition = "2021"
+description = "A Nushell plugin to export data to xlsx files"
+
+[dependencies]
+nu-plugin = "0.100.0"
+nu-protocol = "0.100.0"
+nu-engine = "0.100.0"
+rust_xlsxwriter = "0.52.0"
