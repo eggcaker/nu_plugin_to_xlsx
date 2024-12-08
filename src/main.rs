@@ -1,6 +1,7 @@
 use nu_plugin::{serve_plugin, Plugin, PluginCommand, EvaluatedCall, EngineInterface};
 use nu_protocol::{Category, LabeledError, PipelineData, Signature, SyntaxShape, Type, Value};
 use rust_xlsxwriter::Workbook;
+use std::path::PathBuf;
 
 struct ToXlsx;
 
@@ -94,11 +95,32 @@ impl PluginCommand for ToXlsxCommand {
     fn run(
         &self,
         plugin: &ToXlsx,
-        _engine: &EngineInterface,
+        engine: &EngineInterface,
         call: &EvaluatedCall,
         input: PipelineData,
     ) -> Result<PipelineData, LabeledError> {
-        let path = call.req::<String>(0)?;
+        let path_str = call.req::<String>(0)?;
+        let mut path = PathBuf::from(&path_str);
+        
+        // If the path is relative, make it absolute using the current working directory
+        if path.is_relative() {
+            match engine.get_current_dir() {
+                Ok(cwd) => {
+                    path = PathBuf::from(cwd).join(path);
+                }
+                Err(err) => {
+                    return Err(LabeledError {
+                        msg: "Failed to get current working directory".into(),
+                        labels: vec![],
+                        code: None,
+                        url: None,
+                        help: Some(format!("Error: {}", err)),
+                        inner: vec![],
+                    });
+                }
+            }
+        }
+
         let mut workbook = Workbook::new();
         let input_val = input.into_value(call.head)?;
 
@@ -113,7 +135,7 @@ impl PluginCommand for ToXlsxCommand {
             });
         }
 
-        if let Err(err) = workbook.save(&path) {
+        if let Err(err) = workbook.save(path) {
             return Err(LabeledError {
                 msg: "Failed to save file".into(),
                 labels: vec![],
