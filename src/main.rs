@@ -1,9 +1,15 @@
 use nu_plugin::{serve_plugin, Plugin, PluginCommand, EvaluatedCall, EngineInterface};
 use nu_protocol::{Category, LabeledError, PipelineData, Signature, SyntaxShape, Type, Value};
-use rust_xlsxwriter::Workbook;
+use rust_xlsxwriter::{Workbook, Worksheet, Format, Color};
 use std::path::PathBuf;
 
 struct ToXlsx;
+
+#[derive(Default)]
+struct NestedTableInfo {
+    size: usize,
+    column_count: usize,
+}
 
 impl ToXlsx {
     fn new() -> Self {
@@ -12,54 +18,178 @@ impl ToXlsx {
 
     fn write_value(&self, workbook: &mut Workbook, worksheet_name: &str, value: &Value) -> Result<(), Box<dyn std::error::Error>> {
         let mut worksheet = workbook.add_worksheet().set_name(worksheet_name)?;
+        let header_format = Format::new()
+            .set_bold()
+            .set_background_color(Color::RGB(0x202020))
+            .set_font_color(Color::RGB(0x00FF00));
 
         match value {
+            Value::Record { val, .. } => {
+                // Write headers
+                worksheet.write_string_with_format(0, 0, "Key", &header_format)?;
+                worksheet.write_string_with_format(0, 1, "Value", &header_format)?;
+
+                // First pass: collect nested table info
+                let mut nested_tables = Vec::new();
+                for (_, value) in val.iter() {
+                    if let Value::List { vals, .. } = value {
+                        if let Some(Value::Record { val: first_record, .. }) = vals.first() {
+                            nested_tables.push(NestedTableInfo {
+                                size: vals.len(),
+                                column_count: first_record.len(),
+                            });
+                        } else {
+                            nested_tables.push(NestedTableInfo::default());
+                        }
+                    } else {
+                        nested_tables.push(NestedTableInfo::default());
+                    }
+                }
+
+                // Calculate cumulative row offsets
+                let mut row_offsets = Vec::with_capacity(nested_tables.len());
+                let mut offset = 0;
+                for info in &nested_tables {
+                    row_offsets.push(offset);
+                    offset += info.size;
+                }
+
+                // Second pass: write data with proper spacing
+                let mut current_row = 1;
+                for (((key, value), table_info), row_offset) in val.iter().zip(nested_tables.iter()).zip(row_offsets.iter()) {
+                    let actual_row = current_row + (*row_offset as u32);
+                    worksheet.write_string(actual_row, 0, key)?;
+
+                    match value {
+                        Value::List { vals, .. } => {
+                            if let Some(Value::Record { val: first_record, .. }) = vals.first() {
+                                // Get headers from first record
+                                let headers: Vec<String> = first_record.columns().into_iter().map(|s| s.to_string()).collect();
+                                
+                                // Write nested table headers
+                                for (col, header) in headers.iter().enumerate() {
+                                    worksheet.write_string_with_format(actual_row, (col + 1) as u16, header, &header_format)?;
+                                }
+
+                                // Write nested table data
+                                for (nested_row, record_value) in vals.iter().enumerate() {
+                                    if let Value::Record { val, .. } = record_value {
+                                        for (col, header) in headers.iter().enumerate() {
+                                            if let Some(cell_value) = val.get(header) {
+                                                self.write_cell_value(&mut worksheet, actual_row + 1 + (nested_row as u32), (col + 1) as u16, cell_value)?;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Skip rows for the next main table row
+                                current_row += (table_info.size as u32) + 1;
+                            } else {
+                                worksheet.write_string(actual_row, 1, &format!("{:?}", vals))?;
+                                current_row += 1;
+                            }
+                        }
+                        _ => {
+                            self.write_cell_value(&mut worksheet, actual_row, 1, value)?;
+                            current_row += 1;
+                        }
+                    }
+                }
+            }
             Value::List { vals, .. } => {
-                // Handle list of records (table-like data)
                 if let Some(Value::Record { val: first_record, .. }) = vals.first() {
                     // Write headers
                     let headers: Vec<String> = first_record.columns().into_iter().map(|s| s.to_string()).collect();
                     for (col, header) in headers.iter().enumerate() {
-                        worksheet.write_string(0, col as u16, header)?;
+                        worksheet.write_string_with_format(0, col as u16, header, &header_format)?;
                     }
 
-                    // Write data
-                    for (row, record_value) in vals.iter().enumerate() {
+                    // First pass: collect nested table info
+                    let mut nested_tables = Vec::new();
+                    for record_value in vals.iter() {
+                        if let Value::Record { val, .. } = record_value {
+                            let mut row_info = NestedTableInfo::default();
+                            for (_, value) in val.iter() {
+                                if let Value::List { vals, .. } = value {
+                                    if let Some(Value::Record { val: nested_record, .. }) = vals.first() {
+                                        row_info = NestedTableInfo {
+                                            size: vals.len(),
+                                            column_count: nested_record.len(),
+                                        };
+                                        break;
+                                    }
+                                }
+                            }
+                            nested_tables.push(row_info);
+                        }
+                    }
+
+                    // Calculate cumulative row offsets
+                    let mut row_offsets = Vec::with_capacity(nested_tables.len());
+                    let mut offset = 0;
+                    for info in &nested_tables {
+                        row_offsets.push(offset);
+                        offset += info.size;
+                    }
+
+                    // Second pass: write data with proper spacing
+                    let mut current_row = 1;
+                    for ((record_value, table_info), row_offset) in vals.iter().zip(nested_tables.iter()).zip(row_offsets.iter()) {
+                        let actual_row = current_row + (*row_offset as u32);
                         if let Value::Record { val, .. } = record_value {
                             for (col, header) in headers.iter().enumerate() {
                                 if let Some(cell_value) = val.get(header) {
-                                    self.write_cell(&mut worksheet, (row + 1) as u32, col as u16, cell_value)?;
+                                    match cell_value {
+                                        Value::List { vals, .. } => {
+                                            if let Some(Value::Record { val: nested_first_record, .. }) = vals.first() {
+                                                // Get nested headers
+                                                let nested_headers: Vec<String> = nested_first_record.columns().into_iter().map(|s| s.to_string()).collect();
+                                                
+                                                // Write nested headers
+                                                for (nested_col, nested_header) in nested_headers.iter().enumerate() {
+                                                    worksheet.write_string_with_format(actual_row, (col + nested_col) as u16, nested_header, &header_format)?;
+                                                }
+
+                                                // Write nested data
+                                                for (nested_row, nested_record) in vals.iter().enumerate() {
+                                                    if let Value::Record { val: nested_val, .. } = nested_record {
+                                                        for (nested_col, nested_header) in nested_headers.iter().enumerate() {
+                                                            if let Some(nested_cell_value) = nested_val.get(nested_header) {
+                                                                self.write_cell_value(&mut worksheet, actual_row + 1 + (nested_row as u32), (col + nested_col) as u16, nested_cell_value)?;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            } else {
+                                                self.write_cell_value(&mut worksheet, actual_row, col as u16, cell_value)?;
+                                            }
+                                        }
+                                        _ => {
+                                            self.write_cell_value(&mut worksheet, actual_row, col as u16, cell_value)?;
+                                        }
+                                    }
                                 }
                             }
                         }
+                        current_row += (table_info.size as u32) + 1;
                     }
                 } else {
                     // Handle simple list
                     for (row, item) in vals.iter().enumerate() {
-                        self.write_cell(&mut worksheet, row as u32, 0, item)?;
+                        self.write_cell_value(&mut worksheet, row as u32, 0, item)?;
                     }
-                }
-            }
-            Value::Record { val, .. } => {
-                // Write record as two columns: key and value
-                worksheet.write_string(0, 0, "Key")?;
-                worksheet.write_string(0, 1, "Value")?;
-
-                for (row, (key, value)) in val.iter().enumerate() {
-                    worksheet.write_string((row + 1) as u32, 0, key)?;
-                    self.write_cell(&mut worksheet, (row + 1) as u32, 1, value)?;
                 }
             }
             _ => {
                 // Write single value
-                self.write_cell(&mut worksheet, 0, 0, value)?;
+                self.write_cell_value(&mut worksheet, 0, 0, value)?;
             }
         }
 
         Ok(())
     }
 
-    fn write_cell(&self, worksheet: &mut rust_xlsxwriter::Worksheet, row: u32, col: u16, value: &Value) -> Result<(), Box<dyn std::error::Error>> {
+    fn write_cell_value(&self, worksheet: &mut Worksheet, row: u32, col: u16, value: &Value) -> Result<(), Box<dyn std::error::Error>> {
         match value {
             Value::String { val, .. } => {
                 worksheet.write_string(row, col, val)?;
@@ -77,7 +207,6 @@ impl ToXlsx {
                 worksheet.write_string(row, col, &format!("{}", val))?;
             }
             Value::Filesize { val, .. } => {
-                // Convert filesize to human readable string
                 let size_str = if *val < 1024 {
                     format!("{} B", val)
                 } else if *val < 1024 * 1024 {
@@ -90,7 +219,6 @@ impl ToXlsx {
                 worksheet.write_string(row, col, &size_str)?;
             }
             Value::Duration { val, .. } => {
-                // Convert duration to a readable string
                 let duration_str = if *val < 1_000 {
                     format!("{} ns", val)
                 } else if *val < 1_000_000 {
@@ -101,6 +229,9 @@ impl ToXlsx {
                     format!("{:.1} s", *val as f64 / 1_000_000_000.0)
                 };
                 worksheet.write_string(row, col, &duration_str)?;
+            }
+            Value::List { vals, .. } => {
+                worksheet.write_string(row, col, &format!("{:?}", vals))?;
             }
             _ => {
                 worksheet.write_string(row, col, &format!("{:?}", value))?;
