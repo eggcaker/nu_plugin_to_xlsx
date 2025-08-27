@@ -117,29 +117,53 @@ impl ToXlsx {
             }
             Value::List { vals, .. } => {
                 if let Some(Value::Record { val: first_record, .. }) = vals.first() {
-                    // Write headers
+                    // Get headers and calculate column offsets based on nested table widths
                     let headers: Vec<String> = first_record.columns().into_iter().map(|s| s.to_string()).collect();
-                    for (col, header) in headers.iter().enumerate() {
-                        worksheet.write_string_with_format(0, col as u16, header, &header_format)?;
-                    }
-
-                    // Calculate column offsets based on nested table widths
                     let mut column_offsets = Vec::new();
                     let mut current_offset = 0;
-                    for record_value in vals.iter() {
-                        if let Value::Record { val, .. } = record_value {
-                            for (_, value) in val.iter() {
-                                if let Value::List { vals, .. } = value {
-                                    if let Some(Value::Record { val: nested_record, .. }) = vals.first() {
-                                        column_offsets.push(current_offset);
-                                        current_offset += nested_record.len();
-                                    } else {
-                                        column_offsets.push(current_offset);
-                                        current_offset += 1;
-                                    }
+                    
+                    if let Some(Value::Record { val, .. }) = vals.first() {
+                        for (_header_name, value) in val.iter() {
+                            column_offsets.push(current_offset);
+                            if let Value::List { vals, .. } = value {
+                                if let Some(Value::Record { val: nested_record, .. }) = vals.first() {
+                                    // For nested tables, allocate space for all nested columns
+                                    current_offset += nested_record.len();
                                 } else {
-                                    column_offsets.push(current_offset);
+                                    // For simple lists, allocate just one column
                                     current_offset += 1;
+                                }
+                            } else {
+                                // For simple values, allocate one column
+                                current_offset += 1;
+                            }
+                        }
+                    }
+
+                    // Write headers using the calculated column offsets
+                    for (header, col_offset) in headers.iter().zip(column_offsets.iter()) {
+                        if let Some(Value::Record { val, .. }) = vals.first() {
+                            if let Some(value) = val.get(header) {
+                                match value {
+                                    Value::List { vals, .. } => {
+                                        if let Some(Value::Record { val: nested_record, .. }) = vals.first() {
+                                            // Write parent header for nested table
+                                            worksheet.write_string_with_format(0, *col_offset as u16, header, &header_format)?;
+                                            
+                                            // Write nested table subheaders in row 1 (instead of row 0)
+                                            let nested_headers: Vec<String> = nested_record.columns().into_iter().map(|s| s.to_string()).collect();
+                                            for (nested_col, nested_header) in nested_headers.iter().enumerate() {
+                                                worksheet.write_string_with_format(1, (*col_offset + nested_col) as u16, nested_header, &header_format)?;
+                                            }
+                                        } else {
+                                            // Simple list header
+                                            worksheet.write_string_with_format(0, *col_offset as u16, header, &header_format)?;
+                                        }
+                                    }
+                                    _ => {
+                                        // Simple field header
+                                        worksheet.write_string_with_format(0, *col_offset as u16, header, &header_format)?;
+                                    }
                                 }
                             }
                         }
@@ -173,28 +197,24 @@ impl ToXlsx {
                     }
 
                     // Second pass: write data with proper spacing
-                    let mut current_row = 1;
+                    let mut current_row = 2;  // Start from row 2 since we have two header rows
                     for ((record_value, _table_info), row_offset) in vals.iter().zip(nested_tables.iter()).zip(row_offsets.iter()) {
                         let actual_row = current_row + (*row_offset as u32);
                         if let Value::Record { val, .. } = record_value {
-                            for ((_col, (_header, cell_value)), col_offset) in headers.iter().zip(val.iter()).zip(column_offsets.iter()) {
+                            for (header, col_offset) in headers.iter().zip(column_offsets.iter()) {
+                                if let Some(cell_value) = val.get(header) {
                                 match cell_value {
                                     Value::List { vals, .. } => {
                                         if let Some(Value::Record { val: first_record, .. }) = vals.first() {
                                             // Get nested headers
                                             let nested_headers: Vec<String> = first_record.columns().into_iter().map(|s| s.to_string()).collect();
 
-                                            // Write nested headers
-                                            for (nested_col, nested_header) in nested_headers.iter().enumerate() {
-                                                worksheet.write_string_with_format(actual_row, (*col_offset + nested_col) as u16, nested_header, &header_format)?;
-                                            }
-
-                                            // Write nested data
+                                            // Write nested data (headers are already written globally)
                                             for (nested_row, nested_record) in vals.iter().enumerate() {
                                                 if let Value::Record { val: nested_val, .. } = nested_record {
                                                     for (nested_col, nested_header) in nested_headers.iter().enumerate() {
                                                         if let Some(nested_cell_value) = nested_val.get(nested_header) {
-                                                            self.write_cell_value(&mut worksheet, actual_row + 1 + (nested_row as u32), (*col_offset + nested_col) as u16, nested_cell_value)?;
+                                                            self.write_cell_value(&mut worksheet, actual_row + (nested_row as u32), (*col_offset + nested_col) as u16, nested_cell_value)?;
                                                         }
                                                     }
                                                 }
@@ -206,6 +226,7 @@ impl ToXlsx {
                                     _ => {
                                         self.write_cell_value(&mut worksheet, actual_row, *col_offset as u16, cell_value)?;
                                     }
+                                }
                                 }
                             }
                         }
