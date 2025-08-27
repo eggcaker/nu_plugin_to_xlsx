@@ -4,9 +4,9 @@ let data = [
     sex: "male",
     name: "john",
     signed_up: false,
-    tables: [
-      { name: "haha", age: 35 },
-      { name: "wowo", age: 40 }
+    payload: [
+      { nick_name: "haha", weight: 100 },
+      { nick_name: "wowo", weight: 40 }
     ]
   },
   {
@@ -14,7 +14,7 @@ let data = [
     sex: "male",
     name: "mike",
     signed_up: true,
-    tables: [
+    payload: [
       { name: "haha", age: 35 },
       { name: "wowo", age: 40 }
     ]

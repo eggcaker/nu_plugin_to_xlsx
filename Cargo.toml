@@ -6,7 +6,7 @@ version = "0.2.0"
 
 [dependencies]
 chrono = "0.4"
-nu-engine = "0.105.0"
-nu-plugin = "0.105.0"
-nu-protocol = "0.105.0"
+nu-engine = "0.106.1"
+nu-plugin = "0.106.1"
+nu-protocol = "0.106.1"
 rust_xlsxwriter = "0.52.0"
