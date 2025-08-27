@@ -29,12 +29,6 @@ plugin use to_xlsx
 
 ## Usage
 
-### Save a record to XLSX file with sheet name
-
-```nushell
-{user: bob, age: 30} | to xlsx User.xlsx
-```
-
 ### Save a table to Excel XLSX file
 
 ```nushell
