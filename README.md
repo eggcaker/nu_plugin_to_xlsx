@@ -29,12 +29,6 @@ plugin use to_xlsx
 
 ## Usage
 
-### Save a table to Excel XLSX file
-
-```nushell
-echo [[name]; [bob]] | to xlsx
-```
-
 ### Save piped data to XLSX file with sheet name
 
 ```nushell
@@ -47,7 +41,7 @@ ls | to xlsx Files.xlsx
 [{user: bob, age: 30}, {user: john, age: 40}] | to xlsx Users.xlsx
 ```
 
-### save a nested table to XLSX file
+### Save a nested table to XLSX file
 
 ```nushell
 [
