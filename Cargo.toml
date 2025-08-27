@@ -2,7 +2,13 @@
 description = "A Nushell plugin to export data to xlsx files"
 edition = "2021"
 name = "nu_plugin_to_xlsx"
-version = "0.6.0"
+version = "0.1.0"
+
+authors = ["eggcaker <eggcaker@gmail.com>"]
+categories = ["command-line-utilities"]
+keywords = ["nushell", "plugin", "nu", "xlsx"]
+license = "MIT"
+repository = "https://github.com/eggcaker/nu_plugin_to_xlsx"
 
 [dependencies]
 chrono = "0.4"
