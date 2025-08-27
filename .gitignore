@@ -1,2 +1,4 @@
 target
 *.xlsx
+.DS_Store
+*.json

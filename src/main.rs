@@ -8,7 +8,6 @@ struct ToXlsx;
 #[derive(Default)]
 struct NestedTableInfo {
     size: usize,
-    column_count: usize,
 }
 
 impl ToXlsx {
@@ -33,10 +32,9 @@ impl ToXlsx {
                 let mut nested_tables = Vec::new();
                 for (_, value) in val.iter() {
                     if let Value::List { vals, .. } = value {
-                        if let Some(Value::Record { val: first_record, .. }) = vals.first() {
+                        if let Some(Value::Record { val: _first_record, .. }) = vals.first() {
                             nested_tables.push(NestedTableInfo {
                                 size: vals.len(),
-                                column_count: first_record.len(),
                             });
                         } else {
                             nested_tables.push(NestedTableInfo::default());
@@ -154,10 +152,9 @@ impl ToXlsx {
                             let mut row_info = NestedTableInfo::default();
                             for (_, value) in val.iter() {
                                 if let Value::List { vals, .. } = value {
-                                    if let Some(Value::Record { val: nested_record, .. }) = vals.first() {
+                                    if let Some(Value::Record { val: _nested_record, .. }) = vals.first() {
                                         row_info = NestedTableInfo {
                                             size: vals.len(),
-                                            column_count: nested_record.len(),
                                         };
                                         break;
                                     }
@@ -248,14 +245,16 @@ impl ToXlsx {
                 worksheet.write_string(row, col, &format!("{}", val))?;
             }
             Value::Filesize { val, .. } => {
-                let size_str = if *val < 1024 {
-                    format!("{} B", val)
-                } else if *val < 1024 * 1024 {
-                    format!("{:.1} KB", *val as f64 / 1024.0)
-                } else if *val < 1024 * 1024 * 1024 {
-                    format!("{:.1} MB", *val as f64 / (1024.0 * 1024.0))
+                // In Nu 0.105, use get() method to extract i64 bytes from Filesize
+                let bytes = val.get();
+                let size_str = if bytes < 1024 {
+                    format!("{} B", bytes)
+                } else if bytes < 1024 * 1024 {
+                    format!("{:.1} KB", bytes as f64 / 1024.0)
+                } else if bytes < 1024 * 1024 * 1024 {
+                    format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
                 } else {
-                    format!("{:.1} GB", *val as f64 / (1024.0 * 1024.0 * 1024.0))
+                    format!("{:.1} GB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
                 };
                 worksheet.write_string(row, col, &size_str)?;
             }
@@ -322,11 +321,11 @@ impl PluginCommand for ToXlsxCommand {
                 Err(err) => {
                     return Err(LabeledError {
                         msg: "Failed to get current working directory".into(),
-                        labels: vec![],
+                        labels: Box::new(vec![]),
                         code: None,
                         url: None,
                         help: Some(format!("Error: {}", err)),
-                        inner: vec![],
+                        inner: Box::new(vec![]),
                     });
                 }
             }
@@ -338,22 +337,22 @@ impl PluginCommand for ToXlsxCommand {
         if let Err(err) = plugin.write_value(&mut workbook, "Sheet1", &input_val) {
             return Err(LabeledError {
                 msg: "Failed to export data".into(),
-                labels: vec![],
+                labels: Box::new(vec![]),
                 code: None,
                 url: None,
                 help: Some(format!("Error: {}", err)),
-                inner: vec![],
+                inner: Box::new(vec![]),
             });
         }
 
         if let Err(err) = workbook.save(path) {
             return Err(LabeledError {
                 msg: "Failed to save file".into(),
-                labels: vec![],
+                labels: Box::new(vec![]),
                 code: None,
                 url: None,
                 help: Some(format!("Error: {}", err)),
-                inner: vec![],
+                inner: Box::new(vec![]),
             });
         }
 
